@@ -63,7 +63,9 @@ public class Main {
         LOGGER.info("Cluster Operator configuration is {}", config);
 
         // Create KubernetesClient, AdminClient and KafkaUserOperator classes
-        KubernetesClient client = new OperatorKubernetesClientBuilder("strimzi-user-operator", Main.class.getPackage().getImplementationVersion()).build();
+        KubernetesClient client = new OperatorKubernetesClientBuilder(
+                "strimzi-user-operator", Main.class.getPackage().getImplementationVersion()
+        ).build();
         Admin adminClient = createAdminClient(config, client, new DefaultAdminClientProvider());
         AtomicInteger kafkaUserOperatorExecutorThreadCounter = new AtomicInteger(0);
         ExecutorService kafkaUserOperatorExecutor = Executors.newFixedThreadPool(config.getUserOperationsThreadPoolSize(), r -> new Thread(r, "operator-thread-pool-" + kafkaUserOperatorExecutorThreadCounter.getAndIncrement()));

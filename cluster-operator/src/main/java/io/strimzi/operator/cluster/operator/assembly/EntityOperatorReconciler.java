@@ -5,7 +5,9 @@
 package io.strimzi.operator.cluster.operator.assembly;
 
 import io.fabric8.kubernetes.api.model.LocalObjectReference;
+import io.fabric8.kubernetes.api.model.ServiceAccount;
 import io.fabric8.kubernetes.api.model.apps.Deployment;
+import io.fabric8.kubernetes.api.model.rbac.Role;
 import io.fabric8.kubernetes.api.model.rbac.RoleBinding;
 import io.strimzi.api.kafka.model.Kafka;
 import io.strimzi.api.kafka.model.KafkaResources;
@@ -24,12 +26,12 @@ import io.strimzi.operator.common.ReconciliationLogger;
 import io.strimzi.operator.common.Util;
 import io.strimzi.operator.common.operator.resource.ConfigMapOperator;
 import io.strimzi.operator.common.operator.resource.DeploymentOperator;
+import io.strimzi.operator.common.operator.resource.NetworkPolicyOperator;
 import io.strimzi.operator.common.operator.resource.ReconcileResult;
 import io.strimzi.operator.common.operator.resource.RoleBindingOperator;
 import io.strimzi.operator.common.operator.resource.RoleOperator;
 import io.strimzi.operator.common.operator.resource.SecretOperator;
 import io.strimzi.operator.common.operator.resource.ServiceAccountOperator;
-import io.strimzi.operator.common.operator.resource.NetworkPolicyOperator;
 import io.vertx.core.Future;
 
 import java.time.Clock;
@@ -105,7 +107,7 @@ public class EntityOperatorReconciler {
      *
      * @return                  Future which completes when the reconciliation completes
      */
-    public Future<Void> reconcile(boolean isOpenShift, ImagePullPolicy imagePullPolicy, List<LocalObjectReference> imagePullSecrets, Clock clock)    {
+    public Future<Void> reconcile(boolean isOpenShift, ImagePullPolicy imagePullPolicy, List<LocalObjectReference> imagePullSecrets, Clock clock) {
         return serviceAccount()
                 .compose(i -> entityOperatorRole())
                 .compose(i -> topicOperatorRole())
@@ -128,13 +130,16 @@ public class EntityOperatorReconciler {
      * @return  Future which completes when the reconciliation is done
      */
     protected Future<Void> serviceAccount() {
+        String name = KafkaResources.entityOperatorDeploymentName(reconciliation.name());
+        ServiceAccount desiredServiceAccount = null;
+
+        if (entityOperator != null) {
+            desiredServiceAccount = entityOperator.generateServiceAccount();
+        }
+
         return serviceAccountOperator
-                .reconcile(
-                        reconciliation,
-                        reconciliation.namespace(),
-                        KafkaResources.entityOperatorDeploymentName(reconciliation.name()),
-                        entityOperator != null ? entityOperator.generateServiceAccount() : null
-                ).map((Void) null);
+                .reconcile(reconciliation, reconciliation.namespace(), name, desiredServiceAccount)
+                .map((Void) null);
     }
 
     /**
@@ -145,13 +150,15 @@ public class EntityOperatorReconciler {
      * @return  Future which completes when the reconciliation is done
      */
     protected Future<Void> entityOperatorRole() {
+        Role desiredRole = null;
+        if (entityOperator != null) {
+            desiredRole = entityOperator.generateRole(reconciliation.namespace(), reconciliation.namespace());
+        }
+
+        String name = KafkaResources.entityOperatorDeploymentName(reconciliation.name());
         return roleOperator
-                .reconcile(
-                        reconciliation,
-                        reconciliation.namespace(),
-                        KafkaResources.entityOperatorDeploymentName(reconciliation.name()),
-                        entityOperator != null ? entityOperator.generateRole(reconciliation.namespace(), reconciliation.namespace()) : null
-                ).map((Void) null);
+                .reconcile(reconciliation, reconciliation.namespace(), name, desiredRole)
+                .map((Void) null);
     }
 
     /**
@@ -394,6 +401,7 @@ public class EntityOperatorReconciler {
                     .map((Void) null);
         }
     }
+
     /**
      * Manages the Entity Operator Network Policies.
      *
@@ -429,7 +437,7 @@ public class EntityOperatorReconciler {
             return deploymentOperator
                     .reconcile(reconciliation, reconciliation.namespace(), KafkaResources.entityOperatorDeploymentName(reconciliation.name()), deployment)
                     .compose(patchResult -> {
-                        if (patchResult instanceof ReconcileResult.Noop)   {
+                        if (patchResult instanceof ReconcileResult.Noop) {
                             // Deployment needs ot be rolled because the certificate secret changed or older/expired cluster CA removed
                             if (existingEntityTopicOperatorCertsChanged || existingEntityUserOperatorCertsChanged || clusterCa.certsRemoved()) {
                                 LOGGER.infoCr(reconciliation, "Rolling Entity Operator to update or remove certificates");
@@ -440,7 +448,7 @@ public class EntityOperatorReconciler {
                         // No need to roll, we patched the deployment (and it will roll itself) or we created a new one
                         return Future.succeededFuture();
                     });
-        } else  {
+        } else {
             return deploymentOperator
                     .reconcile(reconciliation, reconciliation.namespace(), KafkaResources.entityOperatorDeploymentName(reconciliation.name()), null)
                     .map((Void) null);

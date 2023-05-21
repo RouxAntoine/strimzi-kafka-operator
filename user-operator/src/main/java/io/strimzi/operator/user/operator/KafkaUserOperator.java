@@ -111,9 +111,8 @@ public class KafkaUserOperator {
      * the Kafka itself (based on existing ACLs, Quotas or SCRAM-SHA credentials). Querying the users also from Kafka
      * is important to ensure proper deletion.
      *
-     * @param namespace     Namespace where to look for the users
-     *
-     * @return  Set with Users and their namespaces
+     * @param namespace Namespace where to look for the users
+     * @return Set with Users and their namespaces
      */
     public CompletionStage<Set<NamespaceAndName>> getAllUsers(String namespace) {
         // Get all users from KafkaUser resources
@@ -124,7 +123,7 @@ public class KafkaUserOperator {
 
         // Get the ACL users
         CompletionStage<Set<String>> aclUsers;
-        if (config.isAclsAdminApiSupported())   {
+        if (config.isAclsAdminApiSupported()) {
             aclUsers = aclOperator.getAllUsers();
         } else {
             aclUsers = CompletableFuture.completedFuture(Set.of());
@@ -133,7 +132,12 @@ public class KafkaUserOperator {
         // Get the SCRAM-SHA users
         CompletionStage<List<String>> scramUsers = scramCredentialsOperator.getAllUsers();
 
-        return CompletableFuture.allOf(kafkaUsers.toCompletableFuture(), quotaUsers.toCompletableFuture(), aclUsers.toCompletableFuture(), scramUsers.toCompletableFuture())
+        return CompletableFuture.allOf(
+                        kafkaUsers.toCompletableFuture(),
+                        quotaUsers.toCompletableFuture(),
+                        aclUsers.toCompletableFuture(),
+                        scramUsers.toCompletableFuture()
+                )
                 .thenApplyAsync(i -> {
                     Set<String> usernames = new HashSet<>();
 
@@ -172,8 +176,7 @@ public class KafkaUserOperator {
      *
      * @param namespace Namespace where these users exist
      * @param names     Name of the user
-     *
-     * @return  Collection with the corresponding NamespaceAndName resources
+     * @return Collection with the corresponding NamespaceAndName resources
      */
     private static Set<NamespaceAndName> toResourceRef(String namespace, Collection<String> names) {
         return names.stream()
@@ -184,14 +187,13 @@ public class KafkaUserOperator {
     /**
      * Reconciles the KafkaUser for creation, update or deletion
      *
-     * @param reconciliation    Unique identification for the reconciliation
-     * @param kafkaUser         KafkaUser resources with the desired user configuration.
-     * @param userSecret        Secret with credentials for the user
-     *
-     * @return  CompletionStage which completes when the reconciliation is done
+     * @param reconciliation Unique identification for the reconciliation
+     * @param kafkaUser      KafkaUser resources with the desired user configuration.
+     * @param userSecret     Secret with credentials for the user
+     * @return CompletionStage which completes when the reconciliation is done
      */
-    public CompletionStage<KafkaUserStatus> reconcile(Reconciliation reconciliation, KafkaUser kafkaUser, Secret userSecret)  {
-        if (kafkaUser != null)  {
+    public CompletionStage<KafkaUserStatus> reconcile(Reconciliation reconciliation, KafkaUser kafkaUser, Secret userSecret) {
+        if (kafkaUser != null) {
             // Create or update
             return createOrUpdate(reconciliation, kafkaUser, userSecret);
         } else {
@@ -203,8 +205,7 @@ public class KafkaUserOperator {
     /**
      * Deletes the user
      *
-     * @param reconciliation    Reconciliation marker
-     *
+     * @param reconciliation Reconciliation marker
      * @return A CompletionStage
      */
     private CompletionStage<Void> delete(Reconciliation reconciliation) {
@@ -229,10 +230,9 @@ public class KafkaUserOperator {
      * should not assume that any resources are in any particular state (e.g. that the absence on
      * one resource means that all resources need to be created).
      *
-     * @param reconciliation    Unique identification for the reconciliation
-     * @param kafkaUser         KafkaUser resources with the desired user configuration.
-     * @param userSecret        Secret with credentials for the user
-     *
+     * @param reconciliation Unique identification for the reconciliation
+     * @param kafkaUser      KafkaUser resources with the desired user configuration.
+     * @param userSecret     Secret with credentials for the user
      * @return a CompletionStage
      */
     private CompletionStage<KafkaUserStatus> createOrUpdate(Reconciliation reconciliation, KafkaUser kafkaUser, Secret userSecret) {
@@ -255,7 +255,7 @@ public class KafkaUserOperator {
         // Reconcile the user: update everything in Kafka and in the Secret
         return reconcileCredentialsQuotasAndAcls(reconciliation, user, userSecret, userStatus)
                 .handleAsync((i, e) -> {
-                    if (e != null)  {
+                    if (e != null) {
                         throw new CompletionException(e);
                     } else {
                         StatusUtils.setStatusConditionAndObservedGeneration(kafkaUser, userStatus, (Throwable) null);
@@ -270,15 +270,15 @@ public class KafkaUserOperator {
      * Depending on the KafkaUser configuration and the user secret, this method will set or generate the credentials
      * for given user.
      *
-     * @param reconciliation    Unique identification for the reconciliation
-     * @param user              Model describing the KafkaUser
-     * @param userSecret        Secret with existing user credentials or null if the secret doesn't exist yet
+     * @param reconciliation Unique identification for the reconciliation
+     * @param user           Model describing the KafkaUser
+     * @param userSecret     Secret with existing user credentials or null if the secret doesn't exist yet
      */
-    private void maybeGenerateCredentials(Reconciliation reconciliation, KafkaUserModel user, Secret userSecret)   {
+    private void maybeGenerateCredentials(Reconciliation reconciliation, KafkaUserModel user, Secret userSecret) {
         // Generates the password or user certificate
         if (user.isScramUser()) {
             maybeGenerateScramCredentials(reconciliation, user, userSecret);
-        } else if (user.isTlsUser())    {
+        } else if (user.isTlsUser()) {
             maybeGenerateTlsCredentials(reconciliation, user, userSecret);
         }
     }
@@ -286,14 +286,14 @@ public class KafkaUserOperator {
     /**
      * Sets or generates the credentials for a SCRAM-SHA-512 user
      *
-     * @param reconciliation    Unique identification for the reconciliation
-     * @param user              Model describing the KafkaUser
-     * @param userSecret        Secret with existing user credentials or null if the secret doesn't exist yet
+     * @param reconciliation Unique identification for the reconciliation
+     * @param user           Model describing the KafkaUser
+     * @param userSecret     Secret with existing user credentials or null if the secret doesn't exist yet
      */
-    private void maybeGenerateScramCredentials(Reconciliation reconciliation, KafkaUserModel user, Secret userSecret)   {
+    private void maybeGenerateScramCredentials(Reconciliation reconciliation, KafkaUserModel user, Secret userSecret) {
         Secret desiredPasswordSecret = null;
 
-        if (user.isUserWithDesiredPassword())   {
+        if (user.isUserWithDesiredPassword()) {
             // User is a SCRAM-SHA-512 user and requested some specific password instead of generating a random password
             desiredPasswordSecret = client.secrets().inNamespace(reconciliation.namespace()).withName(user.desiredPasswordSecretName()).get();
             if (desiredPasswordSecret == null) {
@@ -312,9 +312,9 @@ public class KafkaUserOperator {
     /**
      * Sets or generates the credentials for a TLS user
      *
-     * @param reconciliation    Unique identification for the reconciliation
-     * @param user              Model describing the KafkaUser
-     * @param userSecret        Secret with existing user credentials or null if the secret doesn't exist yet
+     * @param reconciliation Unique identification for the reconciliation
+     * @param user           Model describing the KafkaUser
+     * @param userSecret     Secret with existing user credentials or null if the secret doesn't exist yet
      */
     private void maybeGenerateTlsCredentials(Reconciliation reconciliation, KafkaUserModel user, Secret userSecret) {
         Secret caCert = client.secrets().inNamespace(config.getCaNamespaceOrNamespace()).withName(config.getCaCertSecretName()).get();
@@ -344,23 +344,22 @@ public class KafkaUserOperator {
     /**
      * Reconciles the credentials, quotas and ACLs
      *
-     * @param reconciliation    Unique identification for the reconciliation
-     * @param user              Model describing the KafkaUser
-     * @param userSecret        Current user secret
-     * @param userStatus        Status subresource of the KafkaUser custom resource
-     *
-     * @return                  CompletionStage describing the result
+     * @param reconciliation Unique identification for the reconciliation
+     * @param user           Model describing the KafkaUser
+     * @param userSecret     Current user secret
+     * @param userStatus     Status subresource of the KafkaUser custom resource
+     * @return CompletionStage describing the result
      */
-    private CompletionStage<Void> reconcileCredentialsQuotasAndAcls(Reconciliation reconciliation, KafkaUserModel user, Secret userSecret, KafkaUserStatus userStatus)   {
+    private CompletionStage<Void> reconcileCredentialsQuotasAndAcls(Reconciliation reconciliation, KafkaUserModel user, Secret userSecret, KafkaUserStatus userStatus) {
         Set<SimpleAclRule> tlsAcls = null;
         Set<SimpleAclRule> scramOrNoneAcls = null;
         KafkaUserQuotas tlsQuotas = null;
         KafkaUserQuotas scramOrNoneQuotas = null;
 
-        if (user.isTlsUser() || user.isTlsExternalUser())   {
+        if (user.isTlsUser() || user.isTlsExternalUser()) {
             tlsAcls = user.getSimpleAclRules();
             tlsQuotas = user.getQuotas();
-        } else if (user.isScramUser() || user.isNoneUser())  {
+        } else if (user.isScramUser() || user.isNoneUser()) {
             scramOrNoneAcls = user.getSimpleAclRules();
             scramOrNoneQuotas = user.getQuotas();
         }
@@ -400,12 +399,11 @@ public class KafkaUserOperator {
     /**
      * Reconciles the Kubernetes secret with the generated credentials and sets the secret name in the KafkaUser status subresource
      *
-     * @param reconciliation    Unique identification for the reconciliation
-     * @param user              Model describing the KafkaUser
-     * @param currentSecret     The current user secret
-     * @param userStatus        Status subresource of the KafkaUser custom resource
-     *
-     * @return                  CompletionStage describing the result
+     * @param reconciliation Unique identification for the reconciliation
+     * @param user           Model describing the KafkaUser
+     * @param currentSecret  The current user secret
+     * @param userStatus     Status subresource of the KafkaUser custom resource
+     * @return CompletionStage describing the result
      */
     private CompletionStage<ReconcileResult<Secret>> reconcileUserSecret(Reconciliation reconciliation, KafkaUserModel user, Secret currentSecret, KafkaUserStatus userStatus) {
         return secretOperator

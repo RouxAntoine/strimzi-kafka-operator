@@ -42,13 +42,10 @@ public class NamespaceAndName {
             return true;
         } else if (obj == null) {
             return false;
-        } else if (obj instanceof NamespaceAndName) {
-            NamespaceAndName nrn = (NamespaceAndName) obj;
-            if ((nrn.getName() == null && name == null) ||
+        } else if (obj instanceof NamespaceAndName nrn) {
+            return (nrn.getName() == null && name == null) ||
                     (nrn.getName().equals(name) && ((nrn.getNamespace() == null && namespace == null)
-                            || nrn.getNamespace().equals(namespace)))) {
-                return true;
-            }
+                            || nrn.getNamespace().equals(namespace)));
         }
         return false;
     }

@@ -110,7 +110,7 @@ public class UserController implements Liveness, Readiness {
 
         // Create a thread pool for the reconciliation loops and add the reconciliation loops
         this.threadPool = new ArrayList<>(config.getControllerThreadPoolSize());
-        for (int i = 0; i < config.getControllerThreadPoolSize(); i++)  {
+        for (int i = 0; i < config.getControllerThreadPoolSize(); i++) {
             threadPool.add(new UserControllerLoop(RESOURCE_KIND + "-ControllerLoop-" + i, workQueue, lockManager, scheduledExecutor, client, userLister, secretLister, userOperator, metrics, config));
         }
     }
@@ -118,8 +118,8 @@ public class UserController implements Liveness, Readiness {
     /**
      * Enqueues a user based on an event from the KafkaUser informer
      *
-     * @param user    User which triggered the event
-     * @param action  Type of the event
+     * @param user   User which triggered the event
+     * @param action Type of the event
      */
 
     private void enqueueKafkaUser(KafkaUser user, String action) {
@@ -130,8 +130,8 @@ public class UserController implements Liveness, Readiness {
     /**
      * Enqueues a user based on an event from the Secrets informer
      *
-     * @param userSecret    Secret which triggered the event
-     * @param action        Type of the event
+     * @param userSecret Secret which triggered the event
+     * @param action     Type of the event
      */
     private void enqueueUserSecret(Secret userSecret, String action) {
         LOGGER.infoOp("Secret {} in namespace {} was {}", userSecret.getMetadata().getName(), userSecret.getMetadata().getNamespace(), action);
@@ -150,7 +150,7 @@ public class UserController implements Liveness, Readiness {
     /**
      * Indicates that the informers have been synced and are up-to-date.
      *
-     * @return  True when all informers are synced. False otherwise.
+     * @return True when all informers are synced. False otherwise.
      */
     protected boolean isSynced() {
         return secretInformer.hasSynced() && userInformer.hasSynced();
@@ -195,7 +195,7 @@ public class UserController implements Liveness, Readiness {
         LOGGER.infoOp("Starting the Secret informer");
         secretInformer.start();
 
-        while (!isSynced())   {
+        while (!isSynced()) {
             LOGGER.infoOp("Waiting for the informers to sync");
             try {
                 Thread.sleep(1_000);
@@ -215,10 +215,10 @@ public class UserController implements Liveness, Readiness {
     /**
      * Indicates whether the controller is ready or not. It is considered ready, when all controllers are running.
      *
-     * @return  True when the controller is ready, false otherwise
+     * @return True when the controller is ready, false otherwise
      */
     @Override
-    public boolean isReady()    {
+    public boolean isReady() {
         boolean ready = true;
 
         for (UserControllerLoop t : threadPool) {
@@ -232,10 +232,10 @@ public class UserController implements Liveness, Readiness {
      * Indicates whether the controller is alive or not. It is considered alive when all controller loop threads are
      * alive.
      *
-     * @return  True when the controller thread is alice, false otherwise
+     * @return True when the controller thread is alice, false otherwise
      */
     @Override
-    public boolean isAlive()    {
+    public boolean isAlive() {
         boolean alive = true;
 
         for (UserControllerLoop t : threadPool) {
@@ -251,7 +251,7 @@ public class UserController implements Liveness, Readiness {
     /**
      * Schedules the periodic reconciliation triggers
      */
-    private void schedulePeriodicReconciliations()  {
+    private void schedulePeriodicReconciliations() {
         scheduledExecutor.scheduleAtFixedRate(new PeriodicReconciliation(), reconcileIntervalMs, reconcileIntervalMs, TimeUnit.MILLISECONDS);
     }
 
@@ -259,7 +259,7 @@ public class UserController implements Liveness, Readiness {
      * Internal timer tasks which gets the list of all usernames based on the custom resources, ACLs, Quotas or SCRAM
      * credentials and queues them for reconciliation.
      */
-    class PeriodicReconciliation implements Runnable  {
+    class PeriodicReconciliation implements Runnable {
         @Override
         public void run() {
             LOGGER.infoOp("Triggering periodic reconciliation of {} resources for namespace {}", RESOURCE_KIND, watchedNamespace);
@@ -270,7 +270,7 @@ public class UserController implements Liveness, Readiness {
             try {
                 Set<NamespaceAndName> allUsers = allUsersFuture.toCompletableFuture().get(operationTimeoutMs, TimeUnit.MILLISECONDS);
                 allUsers.forEach(user -> workQueue.enqueue(new SimplifiedReconciliation(RESOURCE_KIND, user.getNamespace(), user.getName(), "timer")));
-            } catch (TimeoutException e)    {
+            } catch (TimeoutException e) {
                 LOGGER.errorOp("Periodic reconciliation of {} resources for namespace {} timed out", RESOURCE_KIND, watchedNamespace, e);
                 allUsersFuture.toCompletableFuture().cancel(true);
             } catch (InterruptedException | ExecutionException e) {
