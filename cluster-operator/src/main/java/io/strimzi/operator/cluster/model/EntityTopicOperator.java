@@ -11,6 +11,7 @@ import io.fabric8.kubernetes.api.model.HasMetadata;
 import io.fabric8.kubernetes.api.model.Secret;
 import io.fabric8.kubernetes.api.model.Volume;
 import io.fabric8.kubernetes.api.model.VolumeMount;
+import io.fabric8.kubernetes.api.model.rbac.ClusterRoleBinding;
 import io.fabric8.kubernetes.api.model.rbac.RoleBinding;
 import io.fabric8.kubernetes.api.model.rbac.RoleRef;
 import io.fabric8.kubernetes.api.model.rbac.RoleRefBuilder;
@@ -223,6 +224,36 @@ public class EntityTopicOperator extends AbstractModel implements SupportsLoggin
         }
 
         return rb;
+    }
+
+    /**
+     * Generates the Topic Operator Cluster Role Binding
+     *
+     * @param namespace Namespace where the Topic Operator is deployed
+     *
+     * @return  Cluster Role Binding for the Topic Operator
+     */
+    public ClusterRoleBinding generateClusterRoleBindingForClusterRole(String namespace) {
+        Subject subject = new SubjectBuilder()
+                .withKind("ServiceAccount")
+                .withName(KafkaResources.entityOperatorDeploymentName(cluster))
+                .withNamespace(namespace)
+                .build();
+
+        RoleRef roleRef = new RoleRefBuilder()
+                .withName("strimzi-entity-operator")
+                .withApiGroup("rbac.authorization.k8s.io")
+                .withKind("ClusterRole")
+                .build();
+
+        return RbacUtils
+                .createClusterRoleBinding(
+                        KafkaResources.entityTopicOperatorClusterRoleBinding(cluster),
+                        roleRef,
+                        List.of(subject),
+                        labels,
+                        templateRoleBinding
+                );
     }
 
     /**

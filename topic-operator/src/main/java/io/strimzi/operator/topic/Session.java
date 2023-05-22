@@ -49,6 +49,7 @@ import static io.strimzi.operator.topic.Config.ZOOKEEPER_SESSION_TIMEOUT_MS;
 public class Session extends AbstractVerticle {
 
     private final static Logger LOGGER = LogManager.getLogger(Session.class);
+    private static final String ALL_NAMESPACE_VALUE = "*";
 
     private final static String SASL_TYPE_PLAIN = "plain";
     private final static String SASL_TYPE_SCRAM_SHA_256 = "scram-sha-256";
@@ -422,8 +423,20 @@ public class Session extends AbstractVerticle {
         try {
             LOGGER.debug("Watching KafkaTopics matching {}", config.get(Config.LABELS).labels());
 
-            Session.this.topicWatch = kubeClient.resources(KafkaTopic.class, KafkaTopicList.class)
-                    .inNamespace(config.get(Config.NAMESPACE)).withLabels(config.get(Config.LABELS).labels()).watch(watcher);
+            String namespace = config.get(Config.NAMESPACE);
+            if (!ALL_NAMESPACE_VALUE.equals(namespace)) {
+                Session.this.topicWatch = kubeClient
+                        .resources(KafkaTopic.class, KafkaTopicList.class)
+                        .inNamespace(namespace)
+                        .withLabels(config.get(Config.LABELS).labels())
+                        .watch(watcher);
+            } else {
+                Session.this.topicWatch = kubeClient
+                        .resources(KafkaTopic.class, KafkaTopicList.class)
+                        .inAnyNamespace()
+                        .withLabels(config.get(Config.LABELS).labels())
+                        .watch(watcher);
+            }
             LOGGER.debug("Watching setup");
             promise.complete();
         } catch (Throwable t) {

@@ -312,6 +312,33 @@ public abstract class AbstractNamespacedResourceOperator<C extends KubernetesCli
     }
 
     /**
+     * Asynchronously gets the resource with the given {@code name} cluster wide.
+     * <br/>
+     * <strong>Required resource name uniqueness in cluster scope</strong>
+     *
+     * @param name The name.
+     * @return A Future for the result.
+     */
+    public Future<T> getAsync(String name) {
+        if (name == null || name.isEmpty()) {
+            throw new IllegalArgumentException(resourceKind + " with an empty name cannot be configured. Please provide a name.");
+        }
+
+        return listAsync(operation().inAnyNamespace())
+                .map(elements -> {
+                    List<T> filteredElements = elements.stream().filter(t -> name.equals(t.getMetadata().getName())).toList();
+                    if (filteredElements.size() > 1) {
+                        LOGGER.warnOp("Multiple resource with name {} found in namespaces [{}] return null to prevent bad behavior",
+                                name, filteredElements.stream().map(t -> t.getMetadata().getNamespace()).collect(Collectors.joining(", "))
+                        );
+                        return null;
+                    } else {
+                        return filteredElements.stream().findFirst().orElse(null);
+                    }
+                });
+    }
+
+    /**
      * Synchronously list the resources in the given {@code namespace} with the given {@code selector}.
      * @param namespace The namespace.
      * @param selector The selector.
@@ -352,7 +379,7 @@ public abstract class AbstractNamespacedResourceOperator<C extends KubernetesCli
      * Asynchronously lists the resource with the given {@code selector} in the given {@code namespace}.
      *
      * @param namespace     Namespace where the resources should be listed
-     * @param selector      Label selector for selecting only some of the resources
+     * @param selector      Label selector for selecting only some resources
      *
      * @return A Future with a list of matching resources.
      */

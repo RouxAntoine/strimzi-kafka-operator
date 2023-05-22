@@ -176,14 +176,13 @@ public class EntityOperatorReconciler {
         if (entityOperator != null && entityOperator.topicOperator() != null) {
             String watchedNamespace = entityOperator.topicOperator().watchedNamespace();
 
-            if (!watchedNamespace.equals(reconciliation.namespace())) {
+            if (!watchedNamespace.equals(reconciliation.namespace()) && !watchedNamespace.equals(ALL_NAMESPACE_VALUE)) {
+                String name = KafkaResources.entityOperatorDeploymentName(reconciliation.name());
+                Role desiredRole = entityOperator.generateRole(reconciliation.namespace(), watchedNamespace);
+
                 return roleOperator
-                        .reconcile(
-                                reconciliation,
-                                watchedNamespace,
-                                KafkaResources.entityOperatorDeploymentName(reconciliation.name()),
-                                entityOperator.generateRole(reconciliation.namespace(), watchedNamespace)
-                        ).map((Void) null);
+                        .reconcile(reconciliation, watchedNamespace, name, desiredRole)
+                        .map((Void) null);
             } else {
                 return Future.succeededFuture();
             }
@@ -225,25 +224,47 @@ public class EntityOperatorReconciler {
      * @return  Future which completes when the reconciliation is done
      */
     protected Future<Void> topicOperatorRoleBindings() {
-        if (entityOperator != null && entityOperator.topicOperator() != null)   {
+        String name = KafkaResources.entityTopicOperatorRoleBinding(reconciliation.name());
+
+        if (entityOperator != null && entityOperator.topicOperator() != null) {
             String watchedNamespace = entityOperator.topicOperator().watchedNamespace();
 
-            Future<ReconcileResult<RoleBinding>> watchedNamespaceFuture;
-            if (!watchedNamespace.equals(reconciliation.namespace()))    {
-                watchedNamespaceFuture = roleBindingOperator.reconcile(reconciliation, watchedNamespace,
-                        KafkaResources.entityTopicOperatorRoleBinding(reconciliation.name()), entityOperator.topicOperator().generateRoleBindingForRole(reconciliation.namespace(), watchedNamespace));
+            Future<?> watchedNamespaceFuture;
+            if (!watchedNamespace.equals(reconciliation.namespace())) {
+                if (!watchedNamespace.equals(ALL_NAMESPACE_VALUE)) {
+
+                    RoleBinding desiredRoleBinding = entityOperator
+                            .topicOperator()
+                            .generateRoleBindingForRole(reconciliation.namespace(), watchedNamespace);
+
+                    watchedNamespaceFuture = roleBindingOperator
+                            .reconcile(reconciliation, watchedNamespace, name, desiredRoleBinding);
+                }  else {
+                    String clusterRoleBindingName = KafkaResources.entityTopicOperatorClusterRoleBinding(reconciliation.name());
+                    ClusterRoleBinding desiredClusterRoleBinding = entityOperator
+                            .topicOperator()
+                            .generateClusterRoleBindingForClusterRole(reconciliation.namespace());
+
+                    watchedNamespaceFuture = clusterRoleBindingOperator
+                            .reconcile(reconciliation, clusterRoleBindingName, desiredClusterRoleBinding);
+                }
             } else {
                 watchedNamespaceFuture = Future.succeededFuture();
             }
 
-            Future<ReconcileResult<RoleBinding>> ownNamespaceFuture = roleBindingOperator.reconcile(reconciliation, reconciliation.namespace(),
-                    KafkaResources.entityTopicOperatorRoleBinding(reconciliation.name()), entityOperator.topicOperator().generateRoleBindingForRole(reconciliation.namespace(), reconciliation.namespace()));
+            RoleBinding desiredRoleBinding = entityOperator
+                    .topicOperator()
+                    .generateRoleBindingForRole(reconciliation.namespace(), reconciliation.namespace());
 
-            return Future.join(ownNamespaceFuture, watchedNamespaceFuture)
+            Future<ReconcileResult<RoleBinding>> ownNamespaceFuture = roleBindingOperator
+                    .reconcile(reconciliation, reconciliation.namespace(), name, desiredRoleBinding);
+
+            return Future
+                    .join(ownNamespaceFuture, watchedNamespaceFuture)
                     .map((Void) null);
         } else {
             return roleBindingOperator
-                    .reconcile(reconciliation, reconciliation.namespace(), KafkaResources.entityTopicOperatorRoleBinding(reconciliation.name()), null)
+                    .reconcile(reconciliation, reconciliation.namespace(), name, null)
                     .map((Void) null);
         }
     }

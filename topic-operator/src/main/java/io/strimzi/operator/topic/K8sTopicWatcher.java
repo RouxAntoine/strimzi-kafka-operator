@@ -24,7 +24,7 @@ class K8sTopicWatcher implements Watcher<KafkaTopic> {
     private final Future<Void> initReconcileFuture;
     private final Runnable onHttpGoneTask;
 
-    private TopicOperator topicOperator;
+    private final TopicOperator topicOperator;
 
     /**
      * Constructor
@@ -82,8 +82,12 @@ class K8sTopicWatcher implements Watcher<KafkaTopic> {
                                 message = "Failure processing " + kind + " watch event " + action + " on resource " + name + " with labels " + labels + ": " + ar.cause().getMessage();
                                 LOGGER.errorCr(logContext.toReconciliation(), message, ar.cause());
                             }
-                            topicOperator.enqueue(logContext, topicOperator.new Event(logContext, kafkaTopic, message, TopicOperator.EventType.WARNING, errorResult -> {
-                            }));
+                            topicOperator.enqueue(
+                                    logContext,
+                                    topicOperator.new Event(
+                                            logContext, kafkaTopic, message, TopicOperator.EventType.WARNING, errorResult -> { }
+                                )
+                            );
                         }
                     };
                     topicOperator.onResourceEvent(logContext, kafkaTopic, action).onComplete(resultHandler);

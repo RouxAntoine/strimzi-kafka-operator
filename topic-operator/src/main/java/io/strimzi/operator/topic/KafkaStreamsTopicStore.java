@@ -23,7 +23,7 @@ public class KafkaStreamsTopicStore implements TopicStore {
 
     private final ReadOnlyKeyValueStore<String, Topic> topicStore;
 
-    private final String storeTopic;
+    private final String topicStoreName;
     private final ProducerActions<String, TopicCommand> producer;
 
     private final BiFunction<String, String, CompletionStage<Integer>> resultService;
@@ -32,17 +32,17 @@ public class KafkaStreamsTopicStore implements TopicStore {
      * Constructor
      *
      * @param topicStore   Read-only topic store containing the topics.
-     * @param storeTopic   Name of the topic store
+     * @param topicStoreName   Name of the topic store
      * @param producer     Producer actions
      * @param resultService  Bifunction
      */
     public KafkaStreamsTopicStore(
             ReadOnlyKeyValueStore<String, Topic> topicStore,
-            String storeTopic,
+            String topicStoreName,
             ProducerActions<String, TopicCommand> producer,
             BiFunction<String, String, CompletionStage<Integer>> resultService) {
         this.topicStore = topicStore;
-        this.storeTopic = storeTopic;
+        this.topicStoreName = topicStoreName;
         this.producer = producer;
         this.resultService = resultService;
     }
@@ -100,7 +100,7 @@ public class KafkaStreamsTopicStore implements TopicStore {
         CompletionStage<Throwable> result = resultService.apply(key, cmd.getUuid())
                 .thenApply(KafkaStreamsTopicStore::toThrowable);
         // Kafka Streams can re-balance in-between these two calls ...
-        producer.apply(new ProducerRecord<>(storeTopic, key, cmd))
+        producer.apply(new ProducerRecord<>(topicStoreName, key, cmd))
                 .whenComplete((r, t) -> {
                     if (t != null) {
                         LOGGER.error("Error sending topic command", t);

@@ -339,6 +339,17 @@ public class KafkaResources {
         return clusterName + "-entity-topic-operator-role";
     }
 
+    /**
+     * Get the name of the Entity Topic Operator cluster role binding given the name of the Kafka cluster.
+     *
+     * @param clusterName  The {@code metadata.name} of the {@code Kafka} resource.
+     *
+     * @return The name of the Entity Topic Operator cluster role binding.
+     */
+    public static String entityTopicOperatorClusterRoleBinding(String clusterName) {
+        return clusterName + "-entity-topic-operator-cluster-role";
+    }
+
     ////////
     // Entity User Operator methods
     ////////

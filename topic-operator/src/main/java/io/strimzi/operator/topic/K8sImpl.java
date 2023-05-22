@@ -4,8 +4,9 @@
  */
 package io.strimzi.operator.topic;
 
-import io.fabric8.kubernetes.api.model.DeletionPropagation;
 import io.fabric8.kubernetes.api.model.Event;
+import io.fabric8.kubernetes.api.model.ObjectMeta;
+import io.fabric8.kubernetes.client.CustomResource;
 import io.fabric8.kubernetes.client.KubernetesClient;
 import io.fabric8.kubernetes.client.KubernetesClientException;
 import io.fabric8.kubernetes.client.dsl.MixedOperation;
@@ -29,6 +30,8 @@ import java.util.List;
 public class K8sImpl implements K8s {
 
     private final static Logger LOGGER = LogManager.getLogger(K8sImpl.class);
+    private static final String ALL_NAMESPACE_VALUE = "*";
+    private static final boolean CASCADING = true;
 
     private final Labels labels;
     private final String namespace;
@@ -65,7 +68,10 @@ public class K8sImpl implements K8s {
         Promise<KafkaTopic> handler = Promise.promise();
         vertx.executeBlocking(future -> {
             try {
-                KafkaTopic kafkaTopic = operation().inNamespace(namespace).resource(topicResource).create();
+                KafkaTopic kafkaTopic = operation()
+                        .inNamespace(topicResource.getMetadata().getNamespace())
+                        .resource(topicResource)
+                        .create();
                 LOGGER.debug("KafkaTopic {} created with version {}->{}",
                         kafkaTopic.getMetadata().getName(),
                         topicResource.getMetadata() != null ? topicResource.getMetadata().getResourceVersion() : null,
@@ -89,7 +95,10 @@ public class K8sImpl implements K8s {
         Promise<KafkaTopic> handler = Promise.promise();
         vertx.executeBlocking(future -> {
             try {
-                KafkaTopic kafkaTopic = operation().inNamespace(namespace).withName(topicResource.getMetadata().getName()).patch(PatchContext.of(PatchType.JSON), topicResource);
+                KafkaTopic kafkaTopic = operation()
+                        .inNamespace(topicResource.getMetadata().getNamespace())
+                        .withName(topicResource.getMetadata().getName())
+                        .patch(PatchContext.of(PatchType.JSON), topicResource);
                 LOGGER.debug("KafkaTopic {} updated with version {}->{}",
                         kafkaTopic != null && kafkaTopic.getMetadata() != null ? kafkaTopic.getMetadata().getName() : null,
                         topicResource.getMetadata() != null ? topicResource.getMetadata().getResourceVersion() : null,
@@ -164,7 +173,11 @@ public class K8sImpl implements K8s {
      */
     @Override
     public Future<KafkaTopic> getFromName(ResourceName resourceName) {
-        return crdOperator.getAsync(namespace, resourceName.toString());
+        if (!namespace.equals(ALL_NAMESPACE_VALUE)) {
+            return crdOperator.getAsync(namespace, resourceName.toString());
+        } else {
+            return crdOperator.getAsync(resourceName.toString());
+        }
     }
 
     /**
@@ -177,7 +190,7 @@ public class K8sImpl implements K8s {
             try {
                 try {
                     LOGGER.debug("Creating event {}", event);
-                    client.v1().events().inNamespace(namespace).resource(event).create();
+                    client.v1().events().inNamespace(event.getMetadata().getNamespace()).resource(event).create();
                 } catch (KubernetesClientException e) {
                     LOGGER.error("Error creating event {}", event, e);
                 }

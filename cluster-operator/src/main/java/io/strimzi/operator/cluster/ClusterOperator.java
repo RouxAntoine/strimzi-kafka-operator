@@ -115,9 +115,10 @@ public class ClusterOperator extends AbstractVerticle {
         startFutures.add(maybeStartStrimziPodSetController());
 
         if (!config.isPodSetReconciliationOnly()) {
-            List<AbstractOperator<?, ?, ?, ?>> operators = new ArrayList<>(asList(
+            List<AbstractOperator<?, ?, ?, ?>> operators = asList(
                     kafkaAssemblyOperator, kafkaMirrorMakerAssemblyOperator,
-                    kafkaConnectAssemblyOperator, kafkaBridgeAssemblyOperator, kafkaMirrorMaker2AssemblyOperator));
+                    kafkaConnectAssemblyOperator, kafkaBridgeAssemblyOperator, kafkaMirrorMaker2AssemblyOperator
+            );
             for (AbstractOperator<?, ?, ?, ?> operator : operators) {
                 startFutures.add(operator.createWatch(namespace, operator.recreateWatch(namespace)).compose(w -> {
                     LOGGER.info("Opened watch for {} operator", operator.kind());
