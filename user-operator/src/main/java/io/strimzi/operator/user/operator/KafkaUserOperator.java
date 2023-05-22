@@ -7,6 +7,7 @@ package io.strimzi.operator.user.operator;
 import io.fabric8.kubernetes.api.model.LabelSelector;
 import io.fabric8.kubernetes.api.model.ListOptionsBuilder;
 import io.fabric8.kubernetes.api.model.Secret;
+import io.fabric8.kubernetes.client.CustomResource;
 import io.fabric8.kubernetes.client.KubernetesClient;
 import io.strimzi.api.kafka.Crds;
 import io.strimzi.api.kafka.model.KafkaUser;
@@ -43,6 +44,7 @@ import java.util.stream.Collectors;
  */
 public class KafkaUserOperator {
     private static final ReconciliationLogger LOGGER = ReconciliationLogger.create(KafkaUserOperator.class.getName());
+    private static final String ALL_NAMESPACE_VALUE = "*";
 
     private final CertManager certManager;
     private final KubernetesClient client;
@@ -116,7 +118,13 @@ public class KafkaUserOperator {
      */
     public CompletionStage<Set<NamespaceAndName>> getAllUsers(String namespace) {
         // Get all users from KafkaUser resources
-        CompletionStage<Set<String>> kafkaUsers = getAllKafkaUserUsernames(namespace);
+
+        final CompletionStage<Set<NamespaceAndName>> kafkaUsers;
+        if (namespace.equals(ALL_NAMESPACE_VALUE)) {
+            kafkaUsers = getAllKafkaUserUsernames(namespace);
+        } else {
+            kafkaUsers = getAllKafkaUserUsernames();
+        }
 
         // Get the quota users
         CompletionStage<Set<String>> quotaUsers = quotasOperator.getAllUsers();
@@ -142,23 +150,23 @@ public class KafkaUserOperator {
                     Set<String> usernames = new HashSet<>();
 
                     // These CompletionStages should be complete since we were waiting for them in allOf above. So we can just getNow() the results.
-                    usernames.addAll(kafkaUsers.toCompletableFuture().getNow(Set.of()));
                     usernames.addAll(quotaUsers.toCompletableFuture().getNow(Set.of()));
                     usernames.addAll(aclUsers.toCompletableFuture().getNow(Set.of()));
                     usernames.addAll(scramUsers.toCompletableFuture().getNow(List.of()));
 
-                    return toResourceRef(namespace, usernames);
+                    Set<NamespaceAndName> namespaceAndNames = toResourceRef(namespace, usernames);
+                    namespaceAndNames.addAll(kafkaUsers.toCompletableFuture().getNow(Set.of()));
+                    return namespaceAndNames;
                 }, executor);
     }
 
     /**
      * Utility method to get all usernames based on the KafkaUser Kubernetes resources
      *
-     * @param namespace     Namespace where to look for the users
-     *
-     * @return  Set of KafkaUser resource names
+     * @param namespace Namespace where to look for the users
+     * @return Set of {@link NamespaceAndName} of KafkaUser resource names
      */
-    private CompletionStage<Set<String>> getAllKafkaUserUsernames(String namespace)  {
+    private CompletionStage<Set<NamespaceAndName>> getAllKafkaUserUsernames(String namespace) {
         return CompletableFuture
                 .supplyAsync(() -> Crds.kafkaUserOperation(client)
                                 .inNamespace(namespace)
@@ -166,7 +174,27 @@ public class KafkaUserOperator {
                                 .list(new ListOptionsBuilder().withResourceVersion("0").build())
                                 .getItems()
                                 .stream()
-                                .map(resource -> resource.getMetadata().getName())
+                                .map(CustomResource::getMetadata)
+                                .map(metadata -> new NamespaceAndName(metadata.getNamespace(), metadata.getName()))
+                                .collect(Collectors.toSet()),
+                        executor);
+    }
+
+    /**
+     * Utility method to get all usernames based on the KafkaUser Kubernetes resources in all cluster
+     *
+     * @return Set of {@link NamespaceAndName} of KafkaUser resource names
+     */
+    private CompletionStage<Set<NamespaceAndName>> getAllKafkaUserUsernames() {
+        return CompletableFuture
+                .supplyAsync(() -> Crds.kafkaUserOperation(client)
+                                .inAnyNamespace()
+                                .withLabelSelector(selector)
+                                .list(new ListOptionsBuilder().withResourceVersion("0").build())
+                                .getItems()
+                                .stream()
+                                .map(CustomResource::getMetadata)
+                                .map(metadata -> new NamespaceAndName(metadata.getNamespace(), metadata.getName()))
                                 .collect(Collectors.toSet()),
                         executor);
     }

@@ -7,6 +7,7 @@ package io.strimzi.operator.cluster.operator.assembly;
 import io.fabric8.kubernetes.api.model.LocalObjectReference;
 import io.fabric8.kubernetes.api.model.ServiceAccount;
 import io.fabric8.kubernetes.api.model.apps.Deployment;
+import io.fabric8.kubernetes.api.model.rbac.ClusterRoleBinding;
 import io.fabric8.kubernetes.api.model.rbac.Role;
 import io.fabric8.kubernetes.api.model.rbac.RoleBinding;
 import io.strimzi.api.kafka.model.Kafka;
@@ -24,6 +25,7 @@ import io.strimzi.operator.common.Annotations;
 import io.strimzi.operator.common.Reconciliation;
 import io.strimzi.operator.common.ReconciliationLogger;
 import io.strimzi.operator.common.Util;
+import io.strimzi.operator.common.operator.resource.ClusterRoleBindingOperator;
 import io.strimzi.operator.common.operator.resource.ConfigMapOperator;
 import io.strimzi.operator.common.operator.resource.DeploymentOperator;
 import io.strimzi.operator.common.operator.resource.NetworkPolicyOperator;
@@ -43,6 +45,7 @@ import java.util.List;
  */
 public class EntityOperatorReconciler {
     private static final ReconciliationLogger LOGGER = ReconciliationLogger.create(EntityOperatorReconciler.class.getName());
+    private static final String ALL_NAMESPACE_VALUE = "*";
 
     private final Reconciliation reconciliation;
     private final long operationTimeoutMs;
@@ -56,6 +59,7 @@ public class EntityOperatorReconciler {
     private final boolean isNetworkPolicyGeneration;
     private final RoleOperator roleOperator;
     private final RoleBindingOperator roleBindingOperator;
+    private final ClusterRoleBindingOperator clusterRoleBindingOperator;
     private final ConfigMapOperator configMapOperator;
     private final NetworkPolicyOperator networkPolicyOperator;
     private boolean existingEntityTopicOperatorCertsChanged = false;
@@ -91,6 +95,7 @@ public class EntityOperatorReconciler {
         this.serviceAccountOperator = supplier.serviceAccountOperations;
         this.roleOperator = supplier.roleOperations;
         this.roleBindingOperator = supplier.roleBindingOperations;
+        this.clusterRoleBindingOperator = supplier.clusterRoleBindingOperator;
         this.configMapOperator = supplier.configMapOperations;
         this.networkPolicyOperator = supplier.networkPolicyOperator;
     }
@@ -197,14 +202,13 @@ public class EntityOperatorReconciler {
         if (entityOperator != null && entityOperator.userOperator() != null) {
             String watchedNamespace = entityOperator.userOperator().watchedNamespace();
 
-            if (!watchedNamespace.equals(reconciliation.namespace())) {
+            if (!watchedNamespace.equals(reconciliation.namespace()) && !watchedNamespace.equals(ALL_NAMESPACE_VALUE)) {
+                String name = KafkaResources.entityOperatorDeploymentName(reconciliation.name());
+                Role desiredRole = entityOperator.generateRole(reconciliation.namespace(), watchedNamespace);
+
                 return roleOperator
-                        .reconcile(
-                                reconciliation,
-                                watchedNamespace,
-                                KafkaResources.entityOperatorDeploymentName(reconciliation.name()),
-                                entityOperator.generateRole(reconciliation.namespace(), watchedNamespace)
-                        ).map((Void) null);
+                        .reconcile(reconciliation, watchedNamespace, name, desiredRole)
+                        .map((Void) null);
             } else {
                 return Future.succeededFuture();
             }
@@ -247,30 +251,53 @@ public class EntityOperatorReconciler {
     /**
      * Manages the User Operator Role Bindings. One Role Binding is in the namespace where the Kafka cluster exists and
      * where the deployment runs. If the operator is configured to watch another namespace, another Role Binding is
-     * created for that namespace as well.
+     * created for that namespace as well. If the operator is configured to watch all namespace, another Cluster Role Binding
+     * is created.
      *
      * @return  Future which completes when the reconciliation is done
      */
     protected Future<Void> userOperatorRoleBindings() {
-        if (entityOperator != null && entityOperator.userOperator() != null)   {
+        String name = KafkaResources.entityUserOperatorRoleBinding(reconciliation.name());
+
+        if (entityOperator != null && entityOperator.userOperator() != null) {
             String watchedNamespace = entityOperator.userOperator().watchedNamespace();
 
-            Future<ReconcileResult<RoleBinding>> watchedNamespaceFuture;
-            if (!watchedNamespace.equals(reconciliation.namespace()))    {
-                watchedNamespaceFuture = roleBindingOperator.reconcile(reconciliation, watchedNamespace,
-                        KafkaResources.entityUserOperatorRoleBinding(reconciliation.name()), entityOperator.userOperator().generateRoleBindingForRole(reconciliation.namespace(), watchedNamespace));
+            Future<?> watchedNamespaceFuture;
+            if (!watchedNamespace.equals(reconciliation.namespace())) {
+
+                if (!watchedNamespace.equals(ALL_NAMESPACE_VALUE)) {
+
+                    RoleBinding desiredRoleBinding = entityOperator
+                            .userOperator()
+                            .generateRoleBindingForRole(reconciliation.namespace(), watchedNamespace);
+
+                    watchedNamespaceFuture = roleBindingOperator
+                            .reconcile(reconciliation, watchedNamespace, name, desiredRoleBinding);
+                } else {
+                    String clusterRoleBindingName = KafkaResources.entityUserOperatorClusterRoleBinding(reconciliation.name());
+                    ClusterRoleBinding desiredClusterRoleBinding = entityOperator
+                            .userOperator()
+                            .generateClusterRoleBindingForClusterRole(reconciliation.namespace());
+
+                    watchedNamespaceFuture = clusterRoleBindingOperator
+                            .reconcile(reconciliation, clusterRoleBindingName, desiredClusterRoleBinding);
+                }
             } else {
                 watchedNamespaceFuture = Future.succeededFuture();
             }
 
-            Future<ReconcileResult<RoleBinding>> ownNamespaceFuture = roleBindingOperator.reconcile(reconciliation, reconciliation.namespace(),
-                    KafkaResources.entityUserOperatorRoleBinding(reconciliation.name()), entityOperator.userOperator().generateRoleBindingForRole(reconciliation.namespace(), reconciliation.namespace()));
+            RoleBinding desiredRoleBinding = entityOperator
+                    .userOperator()
+                    .generateRoleBindingForRole(reconciliation.namespace(), reconciliation.namespace());
+
+            Future<ReconcileResult<RoleBinding>> ownNamespaceFuture = roleBindingOperator
+                    .reconcile(reconciliation, reconciliation.namespace(), name, desiredRoleBinding);
 
             return Future.join(ownNamespaceFuture, watchedNamespaceFuture)
                     .map((Void) null);
         } else {
             return roleBindingOperator
-                    .reconcile(reconciliation, reconciliation.namespace(), KafkaResources.entityUserOperatorRoleBinding(reconciliation.name()), null)
+                    .reconcile(reconciliation, reconciliation.namespace(), name, null)
                     .map((Void) null);
         }
     }
