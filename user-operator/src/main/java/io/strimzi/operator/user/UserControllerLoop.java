@@ -109,7 +109,9 @@ public class UserControllerLoop extends AbstractControllerLoop {
         } else {
             // Resource is not paused or is null (and we should trigger deletion) => we should proceed with reconciliation
             CompletionStage<KafkaUserStatus> reconciliationResult = userOperator
-                    .reconcile(reconciliation, user, secretLister.namespace(reconciliation.namespace()).get(KafkaUserModel.getSecretName(secretPrefix, reconciliation.name())));
+                    .reconcile(reconciliation, user,
+                            secretLister.namespace(reconciliation.namespace()).get(KafkaUserModel.getSecretName(secretPrefix, reconciliation.name()))
+                    );
 
             try {
                 KafkaUserStatus status = new KafkaUserStatus();
