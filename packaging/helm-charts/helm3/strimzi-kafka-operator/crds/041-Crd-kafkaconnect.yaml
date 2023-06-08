@@ -314,6 +314,16 @@ spec:
                             type: string
                             description: The system property value.
                       description: A map of additional system properties which will be passed using the `-D` option to the JVM.
+                    jvmDebug:
+                      type: boolean
+                      description: Specify whether jvm should be start with option -agentlib in server mode to debug jvm.
+                    jvmDebugPort:
+                      type: integer
+                      pattern: "^([1-9][0-9]{0,4}|[1-5][0-9]{4}|6[0-4][0-9]{3}|65[0-4][0-9]{2}|655[0-2][0-9]|6553[0-5])$"
+                      description: "Override default jvm debug remote port, default 5005."
+                    jvmDebugSuspend:
+                      type: boolean
+                      description: "Does jvm debug should be configured with option `suspend=y`, default false."
                   description: JVM Options for pods.
                 jmxOptions:
                   type: object

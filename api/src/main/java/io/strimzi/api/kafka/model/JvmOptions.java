@@ -40,7 +40,10 @@ public class JvmOptions implements UnknownPropertyPreserving, Serializable {
     private boolean gcLoggingEnabled = DEFAULT_GC_LOGGING_ENABLED;
     private List<SystemProperty> javaSystemProperties;
     private Map<String, String> xx;
-    private Map<String, Object> additionalProperties = new HashMap<>(0);
+    private final Map<String, Object> additionalProperties = new HashMap<>(0);
+    private boolean jvmDebug = false;
+    private boolean jvmDebugSuspend = false;
+    private int jvmDebugPort = 5005;
 
     @JsonProperty("-Xmx")
     @Pattern("^[0-9]+[mMgG]?$")
@@ -103,5 +106,33 @@ public class JvmOptions implements UnknownPropertyPreserving, Serializable {
         this.additionalProperties.put(name, value);
     }
 
+    @JsonInclude(JsonInclude.Include.NON_DEFAULT)
+    @Description("Specify whether jvm should be start with option -agentlib in server mode to debug jvm")
+    public boolean isJvmDebug() {
+        return jvmDebug;
+    }
+
+    public void setJvmDebug(boolean jvmDebug) {
+        this.jvmDebug = jvmDebug;
+    }
+
+    @Description("Does jvm debug should be configured with option `suspend=y`, default false")
+    public boolean isJvmDebugSuspend() {
+        return jvmDebugSuspend;
+    }
+
+    public void setJvmDebugSuspend(boolean jvmDebugSuspend) {
+        this.jvmDebugSuspend = jvmDebugSuspend;
+    }
+
+    @Pattern("^([1-9][0-9]{0,4}|[1-5][0-9]{4}|6[0-4][0-9]{3}|65[0-4][0-9]{2}|655[0-2][0-9]|6553[0-5])$")
+    @Description("Override default jvm debug remote port, default 5005")
+    public int getJvmDebugPort() {
+        return jvmDebugPort;
+    }
+
+    public void setJvmDebugPort(int jvmDebugPort) {
+        this.jvmDebugPort = jvmDebugPort;
+    }
 }
 

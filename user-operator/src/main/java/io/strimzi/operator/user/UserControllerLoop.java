@@ -99,7 +99,7 @@ public class UserControllerLoop extends AbstractControllerLoop {
     protected void reconcile(Reconciliation reconciliation) {
         LOGGER.infoCr(reconciliation, "{} will be reconciled", reconciliation.kind());
 
-        KafkaUser user = userLister.get(reconciliation.name());
+        KafkaUser user = userLister.namespace(reconciliation.namespace()).get(reconciliation.name());
 
         if (user != null && Annotations.isReconciliationPausedWithAnnotation(user)) {
             // Reconciliation is paused => we make sure the status is up-to-date but don't do anything
@@ -110,7 +110,9 @@ public class UserControllerLoop extends AbstractControllerLoop {
         } else {
             // Resource is not paused or is null (and we should trigger deletion) => we should proceed with reconciliation
             CompletionStage<KafkaUserStatus> reconciliationResult = userOperator
-                    .reconcile(reconciliation, user, secretLister.get(KafkaUserModel.getSecretName(secretPrefix, reconciliation.name())));
+                    .reconcile(reconciliation, user,
+                            secretLister.namespace(reconciliation.namespace()).get(KafkaUserModel.getSecretName(secretPrefix, reconciliation.name()))
+                    );
 
             try {
                 KafkaUserStatus status = new KafkaUserStatus();
@@ -155,7 +157,7 @@ public class UserControllerLoop extends AbstractControllerLoop {
             if (!new StatusDiff(kafkaUser.getStatus(), desiredStatus).isEmpty())  {
                 try {
                     LOGGER.debugCr(reconciliation, "Updating status of {} {} in namespace {}", reconciliation.kind(), reconciliation.name(), reconciliation.namespace());
-                    KafkaUser latestKafkaUser = userLister.get(reconciliation.name());
+                    KafkaUser latestKafkaUser = userLister.namespace(reconciliation.namespace()).get(reconciliation.name());
                     if (latestKafkaUser != null) {
                         KafkaUser updateKafkaUser = new KafkaUserBuilder(latestKafkaUser)
                                 .withStatus(desiredStatus)

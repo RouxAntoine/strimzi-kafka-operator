@@ -716,6 +716,12 @@ Used in: xref:type-CruiseControlSpec-{context}[`CruiseControlSpec`], xref:type-E
 |boolean
 |javaSystemProperties  1.2+<.<a|A map of additional system properties which will be passed using the `-D` option to the JVM.
 |xref:type-SystemProperty-{context}[`SystemProperty`] array
+|jvmDebug              1.2+<.<a|Specify whether jvm should be start with option -agentlib in server mode to debug jvm.
+|boolean
+|jvmDebugPort          1.2+<.<a|Override default jvm debug remote port, default 5005.
+|integer
+|jvmDebugSuspend       1.2+<.<a|Does jvm debug should be configured with option `suspend=y`, default false.
+|boolean
 |====
 
 [id='type-SystemProperty-{context}']
