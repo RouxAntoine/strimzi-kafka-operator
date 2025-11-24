@@ -52,7 +52,7 @@ public class EntityUserOperatorSpec implements HasConfigurableLogging, HasLivene
     private ResourceRequirements resources;
     private Logging logging;
     private JvmOptions jvmOptions;
-    private Map<String, Object> additionalProperties = new HashMap<>(0);
+    private final Map<String, Object> additionalProperties = new HashMap<>(0);
 
     @Description("The namespace the User Operator should watch.")
     public String getWatchedNamespace() {

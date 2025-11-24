@@ -4,7 +4,10 @@
  */
 package io.strimzi.operator.cluster.model;
 
-import static java.util.stream.Collectors.joining;
+import io.fabric8.kubernetes.api.model.EnvVar;
+import io.fabric8.kubernetes.api.model.ResourceRequirements;
+import io.strimzi.api.kafka.model.JvmOptions;
+import io.strimzi.api.kafka.model.SystemProperty;
 
 import java.util.ArrayList;
 import java.util.List;
@@ -12,10 +15,7 @@ import java.util.Map;
 import java.util.Optional;
 import java.util.Set;
 
-import io.fabric8.kubernetes.api.model.EnvVar;
-import io.fabric8.kubernetes.api.model.ResourceRequirements;
-import io.strimzi.api.kafka.model.JvmOptions;
-import io.strimzi.api.kafka.model.SystemProperty;
+import static java.util.stream.Collectors.joining;
 
 
 /**
@@ -51,6 +51,14 @@ public final class JvmOptionUtils  {
         appendHeapOpts(strimziJavaOpts, jvmOptions);
         parseJvmPerformanceOptions(jvmOptions)
             .ifPresent(opts -> strimziJavaOpts.append(' ').append(opts));
+
+        if (jvmOptions.isJvmDebug()) {
+            strimziJavaOpts
+                    .append(" -agentlib:jdwp=transport=dt_socket,server=y,suspend=")
+                    .append(jvmOptions.isJvmDebugSuspend() ? "y" : "n")
+                    .append(",address=*:")
+                    .append(jvmOptions.getJvmDebugPort());
+        }
 
         var optsTrim = strimziJavaOpts.toString().trim();
         if (!optsTrim.isEmpty()) {

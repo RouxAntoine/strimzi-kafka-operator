@@ -86,8 +86,8 @@ public class ModelUtils {
     /**
      * Generate labels used by entity-operators to find the resources related to given cluster
      *
-     * @param cluster   Name of the cluster
-     * @return  Map with label definition
+     * @param cluster Name of the cluster
+     * @return Map with label definition
      */
     public static String defaultResourceLabels(String cluster) {
         return String.format("%s=%s",
@@ -255,10 +255,9 @@ public class ModelUtils {
      * Gets a map with custom labels or annotations from an environment variable
      *
      * @param envVarName Name of the environment variable which should be used as input
-     *
      * @return A map with labels or annotations
      */
-    public static Map<String, String> getCustomLabelsOrAnnotations(String envVarName)   {
+    public static Map<String, String> getCustomLabelsOrAnnotations(String envVarName) {
         return Util.parseMap(System.getenv().get(envVarName));
     }
 
@@ -331,6 +330,172 @@ public class ModelUtils {
     }
 
     /**
+     * Get the set of JVM options, bringing the Java system properties as well, and fill corresponding Strimzi environment variables
+     * in order to pass them to the running application on the command line
+     *
+     * @param envVars environment variables list to put the JVM options and Java system properties
+     * @param jvmOptions JVM options
+     */
+    public static void javaOptions(List<EnvVar> envVars, JvmOptions jvmOptions) {
+        if (jvmOptions != null) {
+            StringBuilder strimziJavaOpts = new StringBuilder();
+
+            String xms = jvmOptions.getXms();
+            if (xms != null) {
+                strimziJavaOpts.append("-Xms").append(xms);
+            }
+
+            String xmx = jvmOptions.getXmx();
+            if (xmx != null) {
+                strimziJavaOpts.append(" -Xmx").append(xmx);
+            }
+
+            Map<String, String> xx = jvmOptions.getXx();
+            if (xx != null) {
+                xx.forEach((k, v) -> {
+                    strimziJavaOpts.append(' ').append("-XX:");
+
+                    if ("true".equalsIgnoreCase(v)) {
+                        strimziJavaOpts.append("+").append(k);
+                    } else if ("false".equalsIgnoreCase(v)) {
+                        strimziJavaOpts.append("-").append(k);
+                    } else {
+                        strimziJavaOpts.append(k).append("=").append(v);
+                    }
+                });
+            }
+
+            if (jvmOptions.isJvmDebug()) {
+                strimziJavaOpts
+                        .append(" -agentlib:jdwp=transport=dt_socket,server=y,suspend=")
+                        .append(jvmOptions.isJvmDebugSuspend() ? "y" : "n")
+                        .append(",address=*:")
+                        .append(jvmOptions.getJvmDebugPort());
+            }
+
+            String optsTrim = strimziJavaOpts.toString().trim();
+            if (!optsTrim.isEmpty()) {
+                envVars.add(ContainerUtils.createEnvVar(AbstractModel.ENV_VAR_STRIMZI_JAVA_OPTS, optsTrim));
+            }
+
+            List<SystemProperty> javaSystemProperties = jvmOptions.getJavaSystemProperties();
+            if (javaSystemProperties != null) {
+                String propsTrim = ModelUtils.getJavaSystemPropertiesToString(javaSystemProperties).trim();
+                if (!propsTrim.isEmpty()) {
+                    envVars.add(ContainerUtils.createEnvVar(AbstractModel.ENV_VAR_STRIMZI_JAVA_SYSTEM_PROPERTIES, propsTrim));
+                }
+            }
+        }
+    }
+
+    /**
+     * Adds the STRIMZI_JAVA_SYSTEM_PROPERTIES variable to the EnvVar list if any system properties were specified
+     * through the provided JVM options
+     *
+     * @param envVars list of the Environment Variables to add to
+     * @param jvmOptions JVM options
+     */
+    public static void jvmSystemProperties(List<EnvVar> envVars, JvmOptions jvmOptions) {
+        if (jvmOptions != null) {
+            String jvmSystemPropertiesString = ModelUtils.getJavaSystemPropertiesToString(jvmOptions.getJavaSystemProperties());
+            if (jvmSystemPropertiesString != null && !jvmSystemPropertiesString.isEmpty()) {
+                envVars.add(ContainerUtils.createEnvVar(AbstractModel.ENV_VAR_STRIMZI_JAVA_SYSTEM_PROPERTIES, jvmSystemPropertiesString));
+            }
+        }
+    }
+
+    /**
+     * Adds the KAFKA_JVM_PERFORMANCE_OPTS variable to the EnvVar list if any performance related options were specified
+     * through the provided JVM options
+     *
+     * @param envVars list of the Environment Variables to add to
+     * @param jvmOptions JVM options
+     */
+    public static void jvmPerformanceOptions(List<EnvVar> envVars, JvmOptions jvmOptions) {
+        StringBuilder jvmPerformanceOpts = new StringBuilder();
+
+        Map<String, String> xx = jvmOptions != null ? jvmOptions.getXx() : null;
+        if (xx != null) {
+            xx.forEach((k, v) -> {
+                jvmPerformanceOpts.append(' ').append("-XX:");
+
+                if ("true".equalsIgnoreCase(v)) {
+                    jvmPerformanceOpts.append("+").append(k);
+                } else if ("false".equalsIgnoreCase(v)) {
+                    jvmPerformanceOpts.append("-").append(k);
+                } else {
+                    jvmPerformanceOpts.append(k).append("=").append(v);
+                }
+            });
+        }
+
+        String jvmPerformanceOptsString = jvmPerformanceOpts.toString().trim();
+        if (!jvmPerformanceOptsString.isEmpty()) {
+            envVars.add(ContainerUtils.createEnvVar(AbstractModel.ENV_VAR_KAFKA_JVM_PERFORMANCE_OPTS, jvmPerformanceOptsString));
+        }
+    }
+
+    /**
+     * Adds KAFKA_HEAP_OPTS variable to the EnvVar list if any heap related options were specified through the provided JVM options
+     * If Xmx Java Options are not set STRIMZI_DYNAMIC_HEAP_PERCENTAGE and STRIMZI_DYNAMIC_HEAP_MAX may also be set by using the ResourceRequirements
+     *
+     * @param envVars list of the Environment Variables to add to
+     * @param dynamicHeapPercentage value to set for the STRIMZI_DYNAMIC_HEAP_PERCENTAGE
+     * @param dynamicHeapMaxBytes value to set for the STRIMZI_DYNAMIC_HEAP_MAX
+     * @param jvmOptions JVM options
+     * @param resources the resource requirements
+     */
+    public static void heapOptions(List<EnvVar> envVars, int dynamicHeapPercentage, long dynamicHeapMaxBytes, JvmOptions jvmOptions, ResourceRequirements resources) {
+        if (dynamicHeapPercentage <= 0 || dynamicHeapPercentage > 100) {
+            throw new RuntimeException("The Heap percentage " + dynamicHeapPercentage + " is invalid. It has to be >0 and <= 100.");
+        }
+
+        StringBuilder kafkaHeapOpts = new StringBuilder();
+
+        String xms = jvmOptions != null ? jvmOptions.getXms() : null;
+        if (xms != null) {
+            kafkaHeapOpts.append("-Xms")
+                    .append(xms);
+        }
+
+        String xmx = jvmOptions != null ? jvmOptions.getXmx() : null;
+        if (xmx != null) {
+            // Honour user provided explicit max heap
+            kafkaHeapOpts.append(' ').append("-Xmx").append(xmx);
+        } else {
+            // Get the resources => if requests are set, take request. If requests are not set, try limits
+            Quantity configuredMemory = null;
+            if (resources != null) {
+                if (resources.getRequests() != null && resources.getRequests().get("memory") != null) {
+                    configuredMemory = resources.getRequests().get("memory");
+                } else if (resources.getLimits() != null && resources.getLimits().get("memory") != null) {
+                    configuredMemory = resources.getLimits().get("memory");
+                }
+            }
+
+            if (configuredMemory != null) {
+                // Delegate to the container to figure out only when CGroup memory limits are defined to prevent allocating
+                // too much memory on the kubelet.
+
+                envVars.add(ContainerUtils.createEnvVar(AbstractModel.ENV_VAR_DYNAMIC_HEAP_PERCENTAGE, Integer.toString(dynamicHeapPercentage)));
+
+                if (dynamicHeapMaxBytes > 0) {
+                    envVars.add(ContainerUtils.createEnvVar(AbstractModel.ENV_VAR_DYNAMIC_HEAP_MAX, Long.toString(dynamicHeapMaxBytes)));
+                }
+            } else if (xms == null) {
+                // When no memory limit, `Xms`, and `Xmx` are defined then set a default `Xms` and
+                // leave `Xmx` undefined.
+                kafkaHeapOpts.append("-Xms").append(DEFAULT_JVM_XMS);
+            }
+        }
+
+        String kafkaHeapOptsString = kafkaHeapOpts.toString().trim();
+        if (!kafkaHeapOptsString.isEmpty()) {
+            envVars.add(ContainerUtils.createEnvVar(AbstractModel.ENV_VAR_KAFKA_HEAP_OPTS, kafkaHeapOptsString));
+        }
+    }
+
+    /**
      * Adds user-configured affinity to the AffinityBuilder
      *
      * @param builder the builder which is used to populate the node affinity
@@ -390,7 +555,7 @@ public class ModelUtils {
      *
      * @return          The new OwnerReference
      */
-    public static OwnerReference createOwnerReference(HasMetadata owner, boolean isController)   {
+    public static OwnerReference createOwnerReference(HasMetadata owner, boolean isController) {
         return new OwnerReferenceBuilder()
                 .withApiVersion(owner.getApiVersion())
                 .withKind(owner.getKind())
@@ -409,7 +574,7 @@ public class ModelUtils {
      *
      * @return          True if the owner reference is found. False otherwise.
      */
-    public static boolean hasOwnerReference(HasMetadata resource, OwnerReference owner)    {
+    public static boolean hasOwnerReference(HasMetadata resource, OwnerReference owner) {
         if (resource.getMetadata().getOwnerReferences() != null) {
             return resource.getMetadata().getOwnerReferences()
                     .stream()
@@ -455,7 +620,7 @@ public class ModelUtils {
      *
      * @return  List with all possible DNS names
      */
-    public static List<String> generateAllServiceDnsNames(String namespace, String serviceName)    {
+    public static List<String> generateAllServiceDnsNames(String namespace, String serviceName) {
         DnsNameGenerator kafkaDnsGenerator = DnsNameGenerator.of(namespace, serviceName);
 
         List<String> dnsNames = new ArrayList<>(4);
